@@ -151,6 +151,7 @@ TEXT_MODEL_MAP: dict[str, str] = {
     "Inkling2LoopForCausalLM": "inkling2",
     "Inkling2ForConditionalGeneration": "inkling2",
     "Inkling2LoopForConditionalGeneration": "inkling2",
+    "InstellaMoEForCausalLM": "deepseek",
     "InternLM2ForCausalLM": "internlm",
     "InternLM3ForCausalLM": "internlm",
     "JAISLMHeadModel": "jais",

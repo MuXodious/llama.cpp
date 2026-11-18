@@ -429,7 +429,17 @@ llama_model * llama_model_create(llama_model_loader & ml, const llama_model_para
 struct ggml_backend_meta_split_state llama_meta_device_get_split_state(const struct ggml_tensor * tensor, void * userdata) {
     const llama_meta_device_get_split_state_userdata * ud = (const llama_meta_device_get_split_state_userdata *) userdata;
     const llama_hparams & hparams = ud->model->hparams;
-    const std::string tensor_name = tensor->name;
+    // lora adapter matrices take the split state of the base tensor they patch, with the axis remapped
+    // to match the matrix shape: the a matrix follows the input side, the b matrix the output side
+    const std::string                                  tensor_name_full = tensor->name;
+    const size_t                                       lora_suffix_len  = 7;  // ".lora_a" / ".lora_b"
+    const bool                                         is_lora =
+        tensor_name_full.size() > lora_suffix_len &&
+        (tensor_name_full.compare(tensor_name_full.size() - lora_suffix_len, lora_suffix_len, ".lora_a") == 0 ||
+         tensor_name_full.compare(tensor_name_full.size() - lora_suffix_len, lora_suffix_len, ".lora_b") == 0);
+    const bool        is_lora_a = is_lora && tensor_name_full[tensor_name_full.size() - 1] == 'a';
+    const std::string tensor_name =
+        is_lora ? tensor_name_full.substr(0, tensor_name_full.size() - lora_suffix_len) : tensor_name_full;
     const bool is_dsv4 = ud->model->arch == LLM_ARCH_DEEPSEEK4 || ud->model->arch == LLM_ARCH_DEEPSEEK41 ||
         (ud->model->arch == LLM_ARCH_DFLASH && hparams.dsv4_hc_mult > 0);
     const bool is_glm5_next = ud->model->arch == LLM_ARCH_GLM5_NEXT;
@@ -976,6 +986,24 @@ struct ggml_backend_meta_split_state llama_meta_device_get_split_state(const str
     ggml_backend_meta_split_state split_state;
     memset(&split_state, 0, sizeof(split_state));
     tensor_config tc = get_tensor_config();
+    if (is_lora) {
+        // the base tensor sets the split granularity, so the lora slices line up with the base slices
+        const ggml_tensor * base = ud->model->get_tensor(tensor_name.c_str());
+        GGML_ASSERT(base != nullptr);
+        tc.tensor_axis_0                            = base;
+        // the a matrix touches the input side (axis 0) and the b matrix the output side (axis 1),
+        // each keeps the base split state on its own side only
+        const ggml_backend_meta_split_axis own_side = is_lora_a ? GGML_BACKEND_SPLIT_AXIS_0 : GGML_BACKEND_SPLIT_AXIS_1;
+        if (tc.axis != own_side) {
+            if (tc.axis != GGML_BACKEND_SPLIT_AXIS_MIRRORED && tc.axis != GGML_BACKEND_SPLIT_AXIS_0 &&
+                tc.axis != GGML_BACKEND_SPLIT_AXIS_1) {
+                throw std::runtime_error(
+                    format("LoRA tensor '%s': SPLIT_MODE_TENSOR not implemented for base split axis %d",
+                           tensor_name_full.c_str(), (int) tc.axis));
+            }
+            tc.axis = GGML_BACKEND_SPLIT_AXIS_MIRRORED;
+        }
+    }
     split_state.axis = tc.axis;
     if (split_state.axis >= 0 && split_state.axis < GGML_MAX_DIMS) {
         const int64_t blck_size = ggml_blck_size(tc.tensor_axis_0->type);

@@ -303,7 +303,8 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe, const 
             || arch == LLM_ARCH_MISTRAL4
             || arch == LLM_ARCH_MISTRAL_LARGE4
             || arch == LLM_ARCH_HY_V4
-            || arch == LLM_ARCH_XING4_0) {
+            || arch == LLM_ARCH_XING4_0
+            || arch == LLM_ARCH_INSTELLA_MOE) {
         n_embd = 128;
         n_head = 1;
         n_ff   = 192;
@@ -432,7 +433,8 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe, const 
             || arch == LLM_ARCH_HY_V4
             || arch == LLM_ARCH_MISTRAL4
             || arch == LLM_ARCH_MISTRAL_LARGE4
-            || arch == LLM_ARCH_XING4_0) {
+            || arch == LLM_ARCH_XING4_0
+            || arch == LLM_ARCH_INSTELLA_MOE) {
         // GLM5 next MLA is nope only, the cache row is the compressed latent alone.
         ms.add_kv(LLM_KV_ATTENTION_KEY_LENGTH,       arch == LLM_ARCH_GLM5_NEXT ? uint32_t(512) : uint32_t(576));
         ms.add_kv(LLM_KV_ATTENTION_VALUE_LENGTH,     uint32_t(512));
@@ -796,6 +798,12 @@ static gguf_context_ptr get_gguf_ctx(const llm_arch arch, const bool moe, const 
         ms.add_kv(LLM_KV_EXPERT_WEIGHTS_NORM,     true);
     }
 
+    if (arch == LLM_ARCH_INSTELLA_MOE) {
+        // sigmoid noaux_tc routing with the model's actual scale/norm convention
+        ms.add_kv(LLM_KV_EXPERT_WEIGHTS_SCALE, 2.5f);
+        ms.add_kv(LLM_KV_EXPERT_WEIGHTS_NORM,  true);
+    }
+
     if (arch == LLM_ARCH_MAION_CODER) {
         ms.add_kv(LLM_KV_MOE_LATENT_SIZE, n_embd / 2);
         ms.add_kv(LLM_KV_EXPERT_FEED_FORWARD_LENGTH, std::vector<uint32_t>{n_ff, n_ff / 2, n_ff, n_ff});
@@ -1111,6 +1119,7 @@ static bool moe_mandatory(const llm_arch arch) {
         case LLM_ARCH_DEEPSEEK:
         case LLM_ARCH_DEEPSEEK2:
         case LLM_ARCH_DEEPSEEK32:
+        case LLM_ARCH_INSTELLA_MOE:
         case LLM_ARCH_DOTS3NOTE:
         case LLM_ARCH_DEEPSEEK4:
         case LLM_ARCH_DEEPSEEK41:

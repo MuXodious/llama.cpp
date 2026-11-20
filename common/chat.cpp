@@ -1471,6 +1471,17 @@ static common_chat_params_init_fn common_chat_template_detect_params_init(const 
         return common_chat_params_init_inkling;
     }
 
+    // Instella-MoE (AMD, DeepSeek-V3 derivative): pure reasoning model whose chat template
+    // (an R1-Distill-Qwen variant with is_first_sp system-prompt accumulation) never mentions
+    // the plain-text think-tag pair, so the autoparser cannot detect reasoning on its own.
+    // The is_first_sp + is_output_first combination is specific to this template family.
+    if (src.find("is_first_sp") != std::string::npos &&
+        src.find("is_output_first") != std::string::npos &&
+        src.find("<｜User｜>") != std::string::npos) {
+        LOG_DBG("Using specialized template: Instella-MoE\n");
+        return common_chat_params_init_instella;
+    }
+
     return nullptr;
 }
 

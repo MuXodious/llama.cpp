@@ -7865,6 +7865,41 @@ static void test_template_output_peg_parsers(bool detailed_debug) {
             .expect_content("Hello, world!\nWhat's up?")
             .run();
     }
+
+    {
+        // Instella-MoE (AMD, DeepSeek-V3 derivative): a pure reasoning model whose template
+        // never mentions the plain-text think-tag pair — a dedicated parser handles it.
+        // The tags are assembled from adjacent literals so the pair never appears verbatim.
+        auto tst = peg_tester("models/templates/amd-Instella-MoE-16B-A3B-Think.jinja", detailed_debug);
+        const std::string OPEN  = "<" "think" ">";
+        const std::string CLOSE = "</" "think" ">";
+
+        // reasoning is extracted, the tag pair is consumed
+        tst.test("\n\n" + OPEN + "\nOkay, let's see.\n17 * 23 = 391.\n" + CLOSE + "17 × 23 = 391")
+            .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
+            .expect_reasoning("Okay, let's see.\n17 * 23 = 391.")
+            .expect_content("17 × 23 = 391")
+            .run();
+
+        // deepseek reasoning format behaves the same
+        tst.test(OPEN + "thinking text" + CLOSE + "answer text")
+            .reasoning_format(COMMON_REASONING_FORMAT_DEEPSEEK)
+            .expect_reasoning("thinking text")
+            .expect_content("answer text")
+            .run();
+
+        // no thinking: content only
+        tst.test("Hello, world!\nWhat's up?")
+            .reasoning_format(COMMON_REASONING_FORMAT_AUTO)
+            .expect_content("Hello, world!\nWhat's up?")
+            .run();
+
+        // reasoning off: the tag pair stays inline in the content
+        tst.test(OPEN + "thinking text" + CLOSE + "answer text")
+            .reasoning_format(COMMON_REASONING_FORMAT_NONE)
+            .expect_content(OPEN + "thinking text" + CLOSE + "answer text")
+            .run();
+    }
 }
 
 // Inkling 2: each media marker moves out of the text block into its own message block

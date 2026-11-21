@@ -4464,7 +4464,13 @@ llama_context * llama_init_from_model(
         }
     }
 
-    if ((model->hparams.is_mla() || model->arch == LLM_ARCH_DEEPSEEK4 || model->arch == LLM_ARCH_DEEPSEEK41) && params.type_k != params.type_v) {
+    // the MLA mixed-K/V restriction comes from #25871 (added for DeepSeek-V4, generalized to
+    // all MLA); the flash-attn kernels handle K and V types independently, so the
+    // V3-generation MLA family is exempted to allow KV cache quantisation (e.g. K f16 + V q8_0)
+    const bool mla_mixed_kv_restricted =
+            (model->hparams.is_mla() && model->arch != LLM_ARCH_INSTELLA_MOE) ||
+            model->arch == LLM_ARCH_DEEPSEEK4 || model->arch == LLM_ARCH_DEEPSEEK41;
+    if (mla_mixed_kv_restricted && params.type_k != params.type_v) {
         LLAMA_LOG_ERROR("%s: model does not support different K (%s) and V (%s) cache types\n", __func__, ggml_type_name(params.type_k), ggml_type_name(params.type_v));
         return nullptr;
     }
